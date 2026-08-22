@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Turbo Death Warrior</title>
+<style>
+:root {
+  --bg: #1a0d00;
+  --ink: #ffaa00;
+  --dim: #8b5a00;
+  --faint: #5c3d00;
+  --amber: #ffcc44;
+  --red: #ff4747;
+  --panel-border: #8b5a00;
+  --panel-bg: #1a0f00;
+}
+* { box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: ui-monospace, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+  font-size: 14px;
+  line-height: 1.55;
+  text-shadow: 0 0 5px rgba(255, 170, 0, .4);
+  overflow: hidden;
+}
+#crt {
+  position: relative;
+  height: 100%;
+  overflow: hidden;
+}
+#app {
+  position: relative;
+  z-index: 2;
+  max-width: 900px;
+  height: 100%;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 18px 14px;
+  animation: crt-on .5s ease-out, flicker 3.7s infinite;
+}
+@keyframes crt-on {
+  from { filter: brightness(0); }
+  60% { filter: brightness(.4); }
+  to { filter: brightness(1); }
+}
+@keyframes flicker {
+  0%, 100% { opacity: 1; }
+  96% { opacity: 1; }
+  97% { opacity: .86; }
+  98% { opacity: .94; }
+  99% { opacity: .9; }
+}
+.scanlines {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    0deg,
+    rgba(0, 0, 0, .22) 0px,
+    rgba(0, 0, 0, .22) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+  mix-blend-mode: multiply;
+}
+.vignette {
+  position: absolute;
+  inset: -2%;
+  z-index: 6;
+  pointer-events: none;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, .55) 100%);
+}
+.sweep {
+  position: absolute;
+  left: 0; right: 0;
+  height: 120px;
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgba(255, 200, 80, .06), transparent);
+  animation: sweepmove 8s linear infinite;
+}
+@keyframes sweepmove {
+  from { top: -25%; }
+  to { top: 110%; }
+}
+
+header {
+  text-align: center;
+  border: 4px double var(--panel-border);
+  background: var(--panel-bg);
+  padding: 10px 14px;
+}
+.titlebox {
+  font-size: clamp(16px, 3.2vw, 24px);
+  letter-spacing: 4px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.subtitle {
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 11px;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+}
+
+.panel {
+  background: var(--panel-bg);
+  border: 1px solid var(--panel-border);
+  overflow: hidden;
+}
+
+#status, #enemy {
+  padding: 8px 12px;
+  font-size: 13px;
+}
+#status pre, #enemy pre {
+  margin: 0;
+  white-space: pre;
+  overflow-x: auto;
+}
+#status .hpbar.ok { color: var(--ink); }
+#status .hpbar.warn { color: var(--amber); }
+#status .hpbar.crit { color: var(--red); }
+#status .dim { color: var(--dim); }
+#status .amber { color: var(--amber); }
+#enemy { display: none; }
+#enemy.visible { display: block; }
+#enemy .hpbar { color: var(--red); }
+
+#content {
+  flex: 1;
+  padding: 14px 16px;
+  cursor: default;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+#content .line { white-space: pre-wrap; animation: fadein .25s ease; }
+@keyframes fadein { from { opacity: 0; transform: translateY(3px); } to { opacity: 1; transform: none; } }
+#content .spacer { height: .65em; }
+#content .line.err { color: var(--red); }
+
+#controls { display: flex; flex-direction: column; gap: 4px; }
+.choice {
+  text-align: left;
+  font: inherit;
+  color: var(--ink);
+  padding: 4px 10px;
+  border-left: 3px solid transparent;
+  width: 100%;
+  user-select: none;
+}
+.choice .num { color: var(--amber); margin-right: 6px; }
+.choice .num::before { content: "["; }
+.choice .num::after { content: "]"; }
+.choice.active {
+  background: var(--ink);
+  color: var(--bg);
+  border-left-color: var(--amber);
+}
+
+#nameform { display: flex; gap: 8px; align-items: center; display: none; }
+#nameform.visible { display: flex; }
+#nameform .prompt { color: var(--amber); white-space: nowrap; }
+#nameform input {
+  flex: 1;
+  font: inherit;
+  color: var(--ink);
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid var(--dim);
+  padding: 8px 4px;
+  outline: none;
+  caret-color: var(--ink);
+}
+#nameform input::placeholder { color: var(--faint); }
+#nameform button { display: none; }
+
+.hint {
+  color: var(--faint);
+  font-size: 11px;
+  text-align: center;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  margin-top: 4px;
+}
+
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: var(--bg); }
+::-webkit-scrollbar-thumb { background: var(--dim); border: 2px solid var(--bg); }
+::-webkit-scrollbar-thumb:hover { background: var(--ink); }
+</style>
+</head>
+<body>
+<div id="crt">
+  <div class="scanlines"></div>
+  <div class="vignette"></div>
+  <div class="sweep"></div>
+  <div id="app">
+    <header>
+      <div class="titlebox">TURBO DEATH WARRIOR</div>
+      <div class="subtitle">A QUEST FOR THE REALM'S WI-FI ROUTER · TDW-DOS v1.0</div>
+    </header>
+
+    <section id="status" class="panel">
+      <pre id="statusline"></pre>
+    </section>
+
+    <section id="enemy" class="panel">
+      <pre id="enemyline"></pre>
+    </section>
+
+    <main id="content" class="panel"></main>
+
+    <footer id="controls">
+      <div id="choices"></div>
+      <form id="nameform">
+        <span class="prompt">> </span>
+        <input id="nameinput" autocomplete="off" maxlength="30" placeholder="ENTER YOUR NAME, WARRIOR" />
+        <button type="submit" hidden>OK</button>
+      </form>
+      <div class="hint">PRESS 1-9 TO SELECT · CLICK TEXT TO SKIP TYPE-OUT</div>
+    </footer>
+  </div>
+</div>
+
+<script>
+"use strict";
+
+const $ = (s) => document.querySelector(s);
+const contentEl = $("#content");
+const choicesEl = $("#choices");
+const nameForm = $("#nameform");
+const nameInput = $("#nameinput");
+const enemyEl = $("#enemy");
+
+let gameId = null;
+let lastPayload = null;
+let typing = false;
+let skip = false;
+let controlsReady = false;
+let currentLineEl = null;
+let currentLineIndex = 0;
+let currentLines = [];
+let pendingChoice = null;
+
+document.addEventListener("click", () => { skip = true; });
+
+document.addEventListener("keydown", (e) => {
+  if (e.target === nameInput) return;
+  if (nameForm.classList.contains("visible")) {
+    nameInput.focus();
+    return;
+  }
+  if (!controlsReady) return;
+
+  if (e.key === "Enter") {
+    if (pendingChoice !== null) {
+      const choiceId = pendingChoice.dataset.actionId;
+      pendingChoice = null;
+      choose(choiceId);
+    }
+    return;
+  }
+
+  const n = parseInt(e.key, 10);
+  if (n >= 1 && n <= 9) {
+    const choices = choicesEl.querySelectorAll(".choice");
+    const choice = choices[n - 1];
+    if (choice) {
+      choices.forEach(c => c.classList.remove("active"));
+      choice.classList.add("active");
+      pendingChoice = choice;
+      showPendingChoice(choice);
+    }
+  }
+});
+
+async function api(path, body) {
+  const res = await fetch(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body || {}),
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || res.statusText);
+  return data;
+}
+
+function bar(cur, max, width = 20) {
+  const n = Math.max(0, Math.min(width, Math.round((cur / max) * width)));
+  return "█".repeat(n) + "░".repeat(width - n);
+}
+
+function hpClass(pct) {
+  if (pct > 50) return "hpbar ok";
+  if (pct > 25) return "hpbar warn";
+  return "hpbar crit";
+}
+
+function pad(s, len) {
+  return (s || "").toUpperCase().padEnd(len, " ");
+}
+
+function setState(st) {
+  const p = st.player;
+  const hpPct = Math.max(0, (p.hp / p.max_hp) * 100);
+  const hpCls = hpClass(hpPct);
+  const name = pad(p.name || "-", 10);
+  const weapon = pad(p.weapon, 14);
+  const potions = String(p.potions).padStart(2, " ");
+  const crystal = p.has_turbo_crystal ? "YES" : "NO";
+
+  $("#statusline").innerHTML =
+    `${name} ` +
+    `<span class="dim">HP</span> ` +
+    `<span class="${hpCls}">[${bar(p.hp, p.max_hp)}]</span> ` +
+    `<span class="dim">${p.hp}/${p.max_hp}</span> ` +
+    `<span class="dim">WPN:</span>${weapon} ` +
+    `<span class="dim">POT:</span><span class="amber">${potions}</span> ` +
+    `<span class="dim">CRYSTAL:</span><span class="${p.has_turbo_crystal ? "amber" : "dim"}">${crystal}</span>`;
+
+  if (st.enemy) {
+    enemyEl.classList.add("visible");
+    const e = st.enemy;
+    const epct = Math.max(0, (e.hp / e.max_hp) * 100);
+    const ename = pad(e.name, 14);
+    $("#enemyline").innerHTML =
+      `${ename} ` +
+      `<span class="dim">HP</span> ` +
+      `<span class="hpbar">[${bar(e.hp, e.max_hp)}]</span> ` +
+      `<span class="dim">${e.hp}/${e.max_hp}</span>`;
+  } else {
+    enemyEl.classList.remove("visible");
+  }
+}
+
+function startTyping(lines) {
+  currentLines = lines;
+  currentLineIndex = 0;
+  contentEl.innerHTML = "";
+  typing = true;
+  controlsReady = false;
+  typeNextLine();
+}
+
+function typeNextLine() {
+  if (currentLineIndex >= currentLines.length) {
+    typing = false;
+    skip = false;
+    controlsReady = true;
+    renderControls();
+    return;
+  }
+  const text = currentLines[currentLineIndex];
+  if (text === "") {
+    const sp = document.createElement("div");
+    sp.className = "spacer";
+    contentEl.appendChild(sp);
+    currentLineIndex++;
+    typeNextLine();
+    return;
+  }
+  currentLineEl = document.createElement("div");
+  currentLineEl.className = "line";
+  contentEl.appendChild(currentLineEl);
+  let i = 0;
+  const iv = setInterval(() => {
+    i = skip ? text.length : i + 1;
+    currentLineEl.textContent = text.slice(0, i);
+    if (i >= text.length) {
+      clearInterval(iv);
+      currentLineIndex++;
+      setTimeout(typeNextLine, skip ? 0 : 80);
+    }
+  }, 28);
+}
+
+function renderControls() {
+  choicesEl.innerHTML = "";
+  const p = lastPayload;
+  if (!p) return;
+  if (p.text_input) {
+    nameForm.classList.add("visible");
+    nameInput.placeholder = p.text_input;
+    nameInput.value = "";
+    nameInput.focus();
+  } else {
+    nameForm.classList.remove("visible");
+    p.options.forEach((opt, idx) => {
+      const div = document.createElement("div");
+      div.className = "choice";
+      div.dataset.actionId = opt.id;
+      div.innerHTML = `<span class="num">${idx + 1}</span> ${opt.label}`;
+      choicesEl.appendChild(div);
+    });
+  }
+}
+
+function handle(payload) {
+  if (!gameId && payload.game_id) gameId = payload.game_id;
+  lastPayload = payload;
+  choicesEl.innerHTML = "";
+  nameForm.classList.remove("visible");
+  controlsReady = false;
+  skip = false;
+  setState(payload.state);
+  startTyping(payload.messages);
+}
+
+function fatal(err) {
+  contentEl.innerHTML = "";
+  const el = document.createElement("div");
+  el.className = "line err";
+  el.textContent = "SYSTEM ERROR: " + err.message;
+  contentEl.appendChild(el);
+}
+
+function showPendingChoice(choice) {
+  const num = choice.querySelector(".num").textContent;
+  const label = choice.textContent.replace(/^\[\d+\]\s*/, "").trim();
+  const line = document.createElement("div");
+  line.className = "line";
+  line.style.color = "var(--amber)";
+  line.textContent = `> ${num} ${label}`;
+  contentEl.appendChild(line);
+}
+
+async function choose(id) {
+  try {
+    handle(await api("/api/game/" + gameId + "/action", { id }));
+  } catch (err) {
+    fatal(err);
+  }
+}
+
+nameForm.addEventListener("submit", async (ev) => {
+  ev.preventDefault();
+  const name = nameInput.value.trim();
+  if (!name || !gameId) return;
+  nameInput.value = "";
+  nameForm.classList.remove("visible");
+  try {
+    handle(await api("/api/game/" + gameId + "/name", { name }));
+  } catch (err) {
+    fatal(err);
+  }
+});
+
+(async () => {
+  try {
+    handle(await api("/api/game"));
+  } catch (err) {
+    fatal(err);
+  }
+})();
+</script>
+</body>
+</html>
