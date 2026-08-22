@@ -12,6 +12,7 @@ import json
 import os
 import secrets
 import threading
+import time
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 
@@ -41,10 +42,22 @@ _load_env()
 
 HOST = os.environ.get("TDW_HOST", "127.0.0.1")
 PORT = int(os.environ.get("TDW_PORT", "8001"))
-WEB_DIR = Path(__file__).resolve().parents[2] / "web"
+GAME_TTL_SECONDS = int(os.environ.get("TDW_GAME_TTL_SECONDS", "3600"))
+SWEEP_INTERVAL_SECONDS = int(os.environ.get("TDW_SWEEP_INTERVAL_SECONDS", "300"))
 
 GAMES = {}
 LOCK = threading.Lock()
+
+
+def _sweep_expired_games():
+    """Background loop: evict games idle longer than GAME_TTL_SECONDS."""
+    while True:
+        time.sleep(SWEEP_INTERVAL_SECONDS)
+        cutoff = time.time() - GAME_TTL_SECONDS
+        with LOCK:
+            expired = [gid for gid, entry in GAMES.items() if entry["last_active"] < cutoff]
+            for gid in expired:
+                del GAMES[gid]
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -82,7 +95,7 @@ class Handler(BaseHTTPRequestHandler):
             gid = secrets.token_hex(8)
             game = Game()
             with LOCK:
-                GAMES[gid] = game
+                GAMES[gid] = {"game": game, "last_active": time.time()}
             payload = game.start()
             payload["game_id"] = gid
             return self._json(200, payload)
@@ -91,9 +104,11 @@ class Handler(BaseHTTPRequestHandler):
         if len(parts) == 4 and parts[:2] == ["tdw-api", "game"]:
             _, _, gid, op = parts
             with LOCK:
-                game = GAMES.get(gid)
-                if game is None:
+                entry = GAMES.get(gid)
+                if entry is None:
                     return self._error(404, "unknown game - refresh to start a new one")
+                entry["last_active"] = time.time()
+                game = entry["game"]
                 body = self._body()
                 if op == "action":
                     payload = game.act(str(body.get("id", "")))
@@ -107,6 +122,8 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    sweeper = threading.Thread(target=_sweep_expired_games, daemon=True)
+    sweeper.start()
     server = ThreadingHTTPServer((HOST, PORT), Handler)
     print("=" * 46)
     print("   TURBO DEATH WARRIOR - web edition")

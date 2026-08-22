@@ -5,8 +5,8 @@
 
 **Last Updated:** 2026-08-22
 **Project:** Turbo Death Warrior - Web Edition (`turbo-death-warrior` v1.0.0)
-**Repo:** `turbo_death_warrior` @ `main` (HEAD `7d9beb5`)
-**Status:** Stable / playable locally; CI green (32/32 tests); deploy pipeline to Raspberry Pi self-hosted runner live; **known frontend↔API path mismatch** (see Active Priorities).
+**Repo:** `turbo_death_warrior` @ `main` (HEAD `4932e08` + server TTL/eviction pending)
+**Status:** Stable / playable locally; CI green (32/32 tests); deploy pipeline to Raspberry Pi self-hosted runner live; **known frontend↔API path mismatch** (see Active Priorities). Server leak fixed pending commit (GAMES TTL eviction).
 
 ---
 
@@ -15,7 +15,7 @@
 **What it is:** Browser front end for the *Turbo Death Warrior* terminal adventure. Fight a Caffeinated Orc, loot the Turbo Crystal, and defeat the Mega-Goblin King. Retro amber CRT aesthetic, fully keyboard-driven.
 
 **Stack:**
-- Python 3.11, **stdlib only** for runtime (`http.server.ThreadedHTTPServer`, `secrets`, `threading`, `pathlib`, `json`, `random`).
+- Python 3.11, **stdlib only** for runtime (`http.server.ThreadedHTTPServer`, `secrets`, `threading`, `time`, `pathlib`, `json`, `random`).
 - `pytest>=7.0` for tests only (`requirements.txt` / `[project.optional-dependencies] test` in `pyproject.toml:14`).
 - Single-file frontend `web/index.html` (466 lines, ~11.7 KB) — HTML/CSS/JS with scanlines, vignette, typewriter effect.
 - `src` layout (`pyproject.toml:16` — `where = ["src"]`), installed editable via `pip install -e ".[test]"`.
@@ -33,14 +33,14 @@ Config precedence: real env vars > `.env` > built-in defaults (`src/turbo_death_
 **CI/CD:** `.github/workflows/ci.yml` — `test` job (checkout, setup-python 3.11, `pip install -e ".[test]"`, `make check`, `make test`) on push/PR to `main`; `deploy` job (self-hosted, `needs: test`, only on `push` to `main`) rsyncs to `/home/ewanritchie/turbo-death-warrior/`, recreates `.venv`, `systemctl restart turbo-death-warrior`, smoke-checks `curl -sf http://127.0.0.1:8001/tdw-api/game`.
 
 **Git state (2026-08-22):**
-- Branch `main` up to date with `origin/main`.
-- 8 commits since `4b8e037` (initial). HEAD `7d9beb5 trigger deploy`.
-- Untracked: `AGENTS.md`, `LLM_CONTEXT_LOG.md` (this file) — not yet committed.
-- Working tree otherwise clean.
+- Branch `main` ahead of `origin/main` by 1 (4932e08 committed) + 2 modified files staged pending: `AGENTS.md` (Definition of done added) and `src/turbo_death_warrior/server.py` (TTL eviction + WEB_DIR removal).
+- 9 commits since `4b8e037` (initial). HEAD `4932e08 docs: add AGENTS.md and bootstrap LLM_CONTEXT_LOG.md` (7d9beb5 prior).
+- Working tree modified (not yet committed) — this log pending update.
 
 **Known drift / debt:**
-- `src/turbo_death_warrior/server.py:81,91` now serves only `POST /tdw-api/game` and `POST /tdw-api/game/<id>/{name,action}`; `do_GET` returns 404. Frontend `web/index.html:439,452,460` still fetches `/api/game` — **broken integration** until paths are re-aligned or a `GET /` static handler is restored. The deploy smoke check already uses `/tdw-api/game`, so CI deploy will pass but local browser play is broken.
+- `src/turbo_death_warrior/server.py:93,104` now serves only `POST /tdw-api/game` and `POST /tdw-api/game/<id>/{name,action}`; `do_GET` returns 404. Frontend `web/index.html:439,452,460` still fetches `/api/game` — **broken integration** until paths are re-aligned or a `GET /` static handler is restored. The deploy smoke check already uses `/tdw-api/game`, so CI deploy will pass but local browser play is broken.
 - `.env.example:8` shows `TDW_PORT=9999` while README and `.env` / `server.py:43` default to `8001` — harmless but confusing.
+- Server `AGENTS.md:18` now defines Definition of done (`make check` + `make test` + log entry + stale-priority pruning) — this change satisfies it.
 
 ---
 
@@ -51,13 +51,13 @@ turbo_death_warrior/
 ├── src/turbo_death_warrior/
 │   ├── __init__.py               # __version__ = "1.0.0"
 │   ├── game_engine.py:19         # class Game — I/O-free engine; HEAL_AMOUNT=40, STRIKE_DAMAGE=150
-│   └── server.py:50              # ThreadingHTTPServer, Handler(BaseHTTPRequestHandler)
+│   └── server.py:1-140           # ThreadingHTTPServer, TTL sweep, Handler
 ├── test/test_game_engine.py      # 32 pytest cases (7 classes + constants/payload)
 ├── web/index.html                # single-file frontend; api() helper, bar()/hpClass(), typewriter
 ├── pyproject.toml                # setuptools, src layout, requires-python >=3.8
 ├── Makefile                      # run/check/test/requirements/clean; RUN_ENV override
 ├── requirements.txt              # pytest>=7.0
-├── .env / .env.example           # TDW_HOST, TDW_PORT
+├── .env / .env.example           # TDW_HOST, TDW_PORT, TDW_GAME_TTL_SECONDS, TDW_SWEEP_INTERVAL_SECONDS
 └── .github/workflows/ci.yml      # test + deploy (self-hosted)
 ```
 
@@ -69,12 +69,13 @@ turbo_death_warrior/
 - Flow: `reset()` → `start()` → `submit_name()` → `_to_town()` → `_enter_forest()`/`_blacksmith()`/`_stats()` → `_win_fight()` (orc grants `has_turbo_crystal` + potion, transitions to `cave_entrance`) → `_enter_caves()` → `_win_fight()` (boss → `victory`) or `_game_over()`. `over` gate allows only `restart`.
 - Serialization: `_state()` deep-copies player/enemy; `_payload()` is JSON-ready.
 
-**Server (`src/turbo_death_warrior/server.py`):**
-- `_load_env()` reads `.env` (`path.read_text().splitlines()`, skips `#`/empty/`=`-less, respects existing `os.environ`) — `server.py:23-37`.
-- `HOST`/`PORT` from `TDW_HOST`/`TDW_PORT` (defaults `127.0.0.1`/`8001`), `WEB_DIR = parents[2]/web` (currently unused since `GET /` removed).
-- In-memory `GAMES: dict[str, Game]` + `LOCK = threading.Lock()` — one `Game` per `game_id = secrets.token_hex(8)`.
-- `Handler`: `_json()`, `_error()`, `_body()` helpers. `do_GET` → 404. `do_POST` handles `/tdw-api/game` (create) and `/tdw-api/game/<id>/{action,name}` (dispatch under `LOCK`; body `{"id":...}` or `{"name":...}`).
-- `main()` starts `ThreadingHTTPServer((HOST,PORT), Handler)` with `serve_forever()`.
+**Server (`src/turbo_death_warrior/server.py:1-140`):**
+- `_load_env()` reads `.env` (`path.read_text().splitlines()`, skips `#`/empty/`=`-less, respects existing `os.environ`) — `server.py:24-41`.
+- `HOST`/`PORT` from `TDW_HOST`/`TDW_PORT` (defaults `127.0.0.1`/`8001`), plus `GAME_TTL_SECONDS`/`SWEEP_INTERVAL_SECONDS` from `TDW_GAME_TTL_SECONDS`/`TDW_SWEEP_INTERVAL_SECONDS` (defaults `3600`/`300`) — `server.py:43-46`. `Path` import retained for `ENV_FILE`; `WEB_DIR` removed as dead code (was unused, `do_GET` → 404).
+- In-memory `GAMES: dict[str, {"game": Game, "last_active": float}]` + `LOCK = threading.Lock()` — one entry per `game_id = secrets.token_hex(8)`; `last_active = time.time()` on create and on every `action`/`name` touch — `server.py:98,110`.
+- Eviction: `_sweep_expired_games()` (`server.py:52-60`) loops `time.sleep(SWEEP_INTERVAL_SECONDS)` (no LOCK) then `with LOCK` deletes where `last_active < now - GAME_TTL_SECONDS`; started as daemon thread in `main()` before `serve_forever()` — `server.py:124-126`.
+- `Handler`: `_json()`, `_error()`, `_body()` helpers. `do_GET` → 404. `do_POST` handles `/tdw-api/game` (create) and `/tdw-api/game/<id>/{action,name}` (dispatch under `LOCK`; body `{"id":...}` or `{"name":...}`); unknown `game_id` (including swept) → `404 "unknown game - refresh to start a new one"`.
+- `main()` starts sweeper thread then `ThreadingHTTPServer((HOST,PORT), Handler)` with `serve_forever()`.
 
 **Frontend (`web/index.html`):**
 - CSS: CSS vars `--bg:#1a0d00 --ink:#ffaa00 --amber:#ffcc44`, CRT flicker/scanlines/vignette, monospace stack.
@@ -93,8 +94,8 @@ turbo_death_warrior/
 ## Safety + Auth Boundaries
 
 - **No auth / no sessions:** `game_id` is `secrets.token_hex(8)` (64-bit entropy) passed in URL path; no cookies, no CSRF, no login. Anyone with the ID can drive that game. Acceptable for local/LAN game, not for multi-tenant internet exposure.
-- **In-memory store:** `GAMES` dict is process-local, unbounded, never evicted. Restart wipes all games. No persistence, no DB. Memory grows linearly with games created.
-- **Thread safety:** `LOCK` guards `GAMES` dict access and `Game` mutation during `act()`/`submit_name()` (`server.py:84-85,93-103`). `Game` itself is explicitly not thread-safe (`game_engine.py:20`); lock is coarse-grained per-request.
+- **In-memory store:** `GAMES` dict is process-local, bounded by idle TTL. Entry `{game, last_active}` (`server.py:48,98`); TTL `TDW_GAME_TTL_SECONDS` (3600) and sweep `TDW_SWEEP_INTERVAL_SECONDS` (300) — `server.py:45-46`. `_sweep_expired_games()` evicts idle entries under `LOCK` (`server.py:57-60`); daemon thread in `main()` (`server.py:125`). Still no persistence/DB; restart wipes all games. Bounding prevents slow leak over long uptime; worst-case size is creations per TTL window, not process lifetime.
+- **Thread safety:** `LOCK` guards `GAMES` dict access/mutation and `Game` mutation during `act()`/`submit_name()` and sweep (`server.py:97-98,106-118,57-60`). `Game` itself is explicitly not thread-safe (`game_engine.py:20`); lock is coarse-grained per-request; sweep never holds LOCK while sleeping (`server.py:55` outside `with`).
 - **Input handling:** Server coerces `body.get("id"/"name")` to `str` before passing to engine; empty/whitespace names rejected in `submit_name()` with retry prompt. Invalid `action_id` returns `["Invalid choice."]` without state change. `Content-Length` 0 → `{}` body. `JSONDecodeError` → `{}`.
 - **No external deps at runtime:** stdlib only mitigates supply-chain risk. Test dep `pytest` pinned `>=7.0`.
 - **Config:** `.env` is excluded from rsync deploy (`ci.yml` `--exclude '.env'`) so secrets/local HOST/PORT survive redeploys. Env file parser strips quotes/spaces and ignores lines with spaces in key.
@@ -105,12 +106,14 @@ turbo_death_warrior/
 
 ## Active Priorities
 
-1. **Fix frontend↔API path mismatch (P0):** `web/index.html:439,452,460` uses `/api/game` but server expects `/tdw-api/game` since `b16b9ff`. Either update frontend to `/tdw-api/game` (3 refs) or re-add server-side compatibility shim. Verify with `make test` + manual `curl` + browser playthrough. Also decide whether to restore `GET /` to serve `web/index.html` (currently 404) or deploy frontend separately (nginx/static hosting).
-2. **Re-enable static serving or document separate hosting:** `WEB_DIR` is defined but unused. If Raspberry Pi `systemd` expects `GET /` to serve the game, re-add `do_GET` static file handler with path traversal guard, or configure reverse proxy. Update `README.md:103-108` API table and `.github/workflows/ci.yml` smoke check to match chosen path.
-3. **Reconcile port defaults:** `.env.example:8` (`9999`) vs README/`server.py:43`/`.env` (`8001`). Align to one default, or document why they differ.
-4. **Game store hygiene:** Consider TTL/eviction or `max games` cap, and expose `HOST`/`PORT` to smoke check (`curl http://$TDW_HOST:$TDW_PORT/tdw-api/game`).
-5. **Test coverage gap:** No server integration tests (only `test_game_engine.py`). Add `test_server.py` for `Handler` routing, 404s, bad JSON, unknown `game_id`, concurrent access.
-6. **Commit untracked docs:** `AGENTS.md` and `LLM_CONTEXT_LOG.md` are untracked (`git status`). Commit them so CI and future assistants see the protocol.
+1. **Fix frontend↔API path mismatch (P0):** `web/index.html:439,452,460` uses `/api/game` but server expects `/tdw-api/game` since `b16b9ff`. Either update frontend to `/tdw-api/game` (3 refs) or re-add server-side compatibility shim. Verify with `make test` + manual `curl` + browser playthrough. Also decide whether to restore `GET /` to serve `web/index.html` (currently 404) or deploy frontend separately (nginx/static hosting). `WEB_DIR` dead code removed in this change (`server.py` no longer references `web/`).
+2. **Reconcile port defaults:** `.env.example:8` (`9999`) vs README/`server.py:43`/`.env` (`8001`). Align to one default, or document why they differ. Also document new `TDW_GAME_TTL_SECONDS`/`TDW_SWEEP_INTERVAL_SECONDS` (3600/300) in `README.md` and `.env.example`.
+3. **Test coverage gap:** No server integration tests (only `test/test_game_engine.py` covers `Game`; `server.py` `Handler`/`GAMES`/sweep has 0 coverage). Add `test_server.py` for `Handler` routing, 404s, bad JSON, unknown/swept `game_id`, TTL eviction and `last_active` touch behavior, and concurrent access. Cheap sweep tests (mock `time.time`/`sleep`, short TTL) welcome without large scaffolding — see Change Log 2026-08-22 sweep fix for manual mock verification pattern.
+
+*Recently resolved (pruned from active):*
+- **GAMES leak / unbounded store** — fixed 2026-08-22 via TTL eviction (`server.py:45-46,52-60,98,110,124-126`); `GAMES` now `{"game": Game, "last_active": float}` with daemon sweeper.
+- **WEB_DIR dead code** — removed 2026-08-22 (`server.py:44` deleted; `Path` kept for `ENV_FILE`).
+- **Untracked `AGENTS.md`/`LLM_CONTEXT_LOG.md`** — committed `4932e08`.
 
 ---
 
@@ -133,6 +136,13 @@ turbo_death_warrior/
 ---
 
 ## Change Log Entries
+
+### 2026-08-22 — Server TTL Eviction + WEB_DIR Cleanup (server.py only)
+- **Summary:** `src/turbo_death_warrior/server.py:15,45-46,52-60,98,110,124-126` — fix GAMES leak (never-evicted dict) to `{id: {"game": Game, "last_active": float}}` with `import time`, env-configurable `TDW_GAME_TTL_SECONDS` (3600) / `TDW_SWEEP_INTERVAL_SECONDS` (300) (`os.environ.get` matching `HOST`/`PORT` style), `last_active=time.time()` on create/action/name, daemon `threading.Thread(target=_sweep_expired_games, daemon=True)` in `main()` that `sleep`s then `with LOCK` evicts `last_active < now - TTL` (no LOCK while sleeping); preserve 404 `"unknown game - refresh to start a new one"` for swept games; delete dead `WEB_DIR` line (keep `Path` for `ENV_FILE`).
+- **Why:** Spec fix for slow memory leak over long uptime; `GAMES` grew without bound per `secrets.token_hex(8)` creation. Second fix removes unused `WEB_DIR` (`do_GET` always 404).
+- **Impact:** Behavior: games idle > TTL now evicted (whether finished or abandoned); API unchanged except swept IDs now 404 as designed. Config: two new env vars with defaults. No threads held while sleeping; sweep under LOCK only for mutation. `game_engine.py` and frontend untouched per scope. Snapshot/Architecture/Safety/Priorities updated to reflect bounded store and removed dead code.
+- **Validation:** `make check` OK (`py_compile server.py game_engine.py`); `make test` 32/32 (`test/test_game_engine.py`); manual `python3 -c` with `unittest.mock.patch(time.time)` verified shape, touch bump, and `_sweep_expired_games` cutoff eviction; `WEB_DIR` absence and `Path` retention checked. Existing tests cover only `Game` — `server.py` has 0 coverage (flagged in Active Priorities); no large test suite added, cheap mock sweep tests welcome per spec.
+- **Follow-ups:** Document new env vars in `README.md`/` .env.example`; consider adding focused `test_server.py` for `Handler` routing and sweep (mock `time`); verify deploy on Pi restarts sweeper thread; frontend `/api` vs `/tdw-api` mismatch still P0.
 
 ### 2026-08-22 — Context Log Bootstrap
 - **Summary:** Created `LLM_CONTEXT_LOG.md` from empty file; populated Snapshot, Architecture, Safety + Auth, Priorities, Protocol, and retroactive log by inspecting `src/turbo_death_warrior/game_engine.py`, `src/turbo_death_warrior/server.py`, `web/index.html`, `pyproject.toml`, `Makefile`, `.env{,.example}`, `.github/workflows/ci.yml`, and `git log --oneline`.
