@@ -2,10 +2,11 @@
 
 A browser front end for the *Turbo Death Warrior* terminal adventure.
 Fight a Caffeinated Orc, loot the Turbo Crystal, and take back the realm's
-Wi-Fi router from the Mega-Goblin King - now with HP bars and zero typing
-`1` into a console.
+Wi-Fi router from the Mega-Goblin King - now with a retro amber CRT terminal
+aesthetic and fully keyboard-driven controls.
 
-Standard library only. No dependencies, no install step.
+Standard library only. No dependencies for the game itself; only `pytest` for
+the test suite.
 
 ## Quick Start
 
@@ -23,11 +24,13 @@ Then open <http://localhost:8001> in your browser. Stop with `Ctrl+C`.
 
 ## Make Targets
 
-| Target   | Description                                          |
-|----------|------------------------------------------------------|
-| `run`    | Start the web server (default target)                |
-| `check`  | Byte-compile the Python sources as a sanity check    |
-| `clean`  | Remove caches (`__pycache__`, `.pyc`)                |
+| Target        | Description                                            |
+|---------------|--------------------------------------------------------|
+| `run`         | Start the web server (default target)                  |
+| `requirements`| Install Python dependencies (`pytest`)                 |
+| `check`       | Byte-compile the Python sources as a sanity check      |
+| `test`        | Run the test suite (depends on `requirements`)         |
+| `clean`       | Remove caches (`__pycache__`, `.pytest_cache`)         |
 
 Useful variables (all optional):
 
@@ -46,9 +49,35 @@ TDW_PORT=8001
 Precedence: command-line / real environment variables beat `.env`,
 which beats the built-in defaults.
 
-## How to Play
+## Running Tests
 
-1. Enter your name when prompted.
+```sh
+make test
+```
+
+Or manually:
+
+```sh
+pip install -r requirements.txt
+python -m pytest test_game_engine.py -v
+```
+
+The test suite covers 32 cases across initialization, name submission, town
+actions, cave entrance, combat mechanics, orc/boss defeat, game over, restart,
+state serialization, constants, and payload structure.
+
+## CI / GitHub Actions
+
+A workflow (`.github/workflows/ci.yml`) runs on every push and PR to `main`:
+
+1. Sets up Python 3.11 with pip caching
+2. Runs `make requirements`
+3. Runs `make check`
+4. Runs `make test`
+
+## How to Play (Keyboard-Only)
+
+1. Type your name and press **Enter**.
 2. In **Oakhaven Village**, visit the Blacksmith first - the Rusty Spork
    will not get it done.
 3. Head **north** to the Whispering Forest and defeat the Caffeinated Orc
@@ -58,20 +87,25 @@ which beats the built-in defaults.
 6. If things go badly, drink potions - attacking and healing are your only
    other options. Death is permanent until you click *Try Again*.
 
-You can farm the forest for extra crystals/potions before the boss, just
-like in the CLI version.
+**Controls:**
+- Press **1–9** to select a menu option (shows as `> 1 GO NORTH...`)
+- Press **Enter** to confirm your selection
+- Click anywhere in the text area to skip the typewriter effect
+
+You can farm the forest for extra crystals/potions before the boss,
+just like in the CLI version.
 
 ## Project Structure
 
 ```
 turbo_death_warrior/
-├── turbo_death_warrior.py   # original CLI game (still playable)
 ├── game_engine.py           # I/O-free rewrite of the game logic
 ├── server.py                # stdlib HTTP server on port 8001
 ├── web/
 │   └── index.html           # single-file frontend (HTML/CSS/JS)
+├── test_game_engine.py      # 32 unit tests (pytest)
 ├── Makefile
-├── requirements.txt         # intentionally empty: stdlib only
+├── requirements.txt         # pytest for test suite
 ├── .env                     # local config (not committed)
 ├── .env.example             # config template
 └── README.md
