@@ -17,7 +17,7 @@ make            # starts the server on http://localhost:8001
 or without make:
 
 ```sh
-python3 server.py
+python3 -m turbo_death_warrior.server
 ```
 
 Then open <http://localhost:8001> in your browser. Stop with `Ctrl+C`.
@@ -59,7 +59,7 @@ Or manually:
 
 ```sh
 pip install -r requirements.txt
-python -m pytest test_game_engine.py -v
+python -m pytest test/ -v
 ```
 
 The test suite covers 32 cases across initialization, name submission, town
@@ -75,39 +75,24 @@ A workflow (`.github/workflows/ci.yml`) runs on every push and PR to `main`:
 3. Runs `make check`
 4. Runs `make test`
 
-## How to Play (Keyboard-Only)
-
-1. Type your name and press **Enter**.
-2. In **Oakhaven Village**, visit the Blacksmith first - the Rusty Spork
-   will not get it done.
-3. Head **north** to the Whispering Forest and defeat the Caffeinated Orc
-   to obtain the Turbo Crystal (+1 potion).
-4. At the **Doom Caves Entrance**, enter and face the Mega-Goblin King.
-5. Unleash the **Turbo Death Strike** while you hold the crystal.
-6. If things go badly, drink potions - attacking and healing are your only
-   other options. Death is permanent until you click *Try Again*.
-
-**Controls:**
-- Press **1–9** to select a menu option (shows as `> 1 GO NORTH...`)
-- Press **Enter** to confirm your selection
-- Click anywhere in the text area to skip the typewriter effect
-
-You can farm the forest for extra crystals/potions before the boss,
-just like in the CLI version.
 
 ## Project Structure
 
 ```
 turbo_death_warrior/
-├── game_engine.py           # I/O-free rewrite of the game logic
-├── server.py                # stdlib HTTP server on port 8001
+├── src/
+│   └── turbo_death_warrior/
+│       ├── __init__.py
+│       ├── game_engine.py       # I/O-free rewrite of the game logic
+│       └── server.py            # stdlib HTTP server on port 8001
+├── test/
+│   └── test_game_engine.py      # 32 unit tests (pytest)
 ├── web/
-│   └── index.html           # single-file frontend (HTML/CSS/JS)
-├── test_game_engine.py      # 32 unit tests (pytest)
+│   └── index.html               # single-file frontend (HTML/CSS/JS)
 ├── Makefile
-├── requirements.txt         # pytest for test suite
-├── .env                     # local config (not committed)
-├── .env.example             # config template
+├── requirements.txt             # pytest for test suite
+├── .env                         # local config (not committed)
+├── .env.example                 # config template
 └── README.md
 ```
 

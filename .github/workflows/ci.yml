@@ -20,8 +20,8 @@ jobs:
           python-version: "3.11"
           cache: pip
 
-      - name: Install dependencies
-        run: make requirements
+      - name: Install package in editable mode with test dependencies
+        run: pip install -e ".[test]"
 
       - name: Run syntax check
         run: make check
