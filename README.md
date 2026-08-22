@@ -1,9 +1,12 @@
-# Turbo Death Warrior - Web Edition
+# Turbo Death Warrior - API
 
-A browser front end for the *Turbo Death Warrior* terminal adventure.
-Fight a Caffeinated Orc, loot the Turbo Crystal, and take back the realm's
-Wi-Fi router from the Mega-Goblin King - now with a retro amber CRT terminal
-aesthetic and fully keyboard-driven controls.
+Backend for the *Turbo Death Warrior* terminal adventure — an API-only
+service that powers the game. Fight a Caffeinated Orc, loot the Turbo
+Crystal, and take back the realm's Wi-Fi router from the Mega-Goblin King.
+
+The frontend lives in the portfolio site (`my-website/js/turbo-death-warrior.js`
+rendered via `projects.html#turbo-death-warrior`); this repo is intentionally
+API-only and has no bundled `web/` frontend.
 
 Standard library only. No dependencies for the game itself; only `pytest` for
 the test suite.
@@ -11,7 +14,7 @@ the test suite.
 ## Quick Start
 
 ```sh
-make            # starts the server on http://localhost:8001
+make            # starts the API server on http://localhost:8001
 ```
 
 or without make:
@@ -20,7 +23,15 @@ or without make:
 python3 -m turbo_death_warrior.server
 ```
 
-Then open <http://localhost:8001> in your browser. Stop with `Ctrl+C`.
+The server is API-only (no static frontend — `GET /` returns `404`). The
+game is played via the portfolio site (`my-website` → `projects.html`), or
+against the API directly:
+
+```sh
+curl -X POST http://localhost:8001/tdw-api/game | jq
+```
+
+Stop with `Ctrl+C`.
 
 ## Make Targets
 
@@ -44,6 +55,8 @@ Configuration is centralized in `.env` (see `.env.example`):
 ```sh
 TDW_HOST=127.0.0.1              # 0.0.0.0 to allow LAN access
 TDW_PORT=8001
+TDW_GAME_TTL_SECONDS=3600       # idle seconds before game evicted
+TDW_SWEEP_INTERVAL_SECONDS=300  # how often sweep runs
 ```
 
 Precedence: command-line / real environment variables beat `.env`,
@@ -84,11 +97,9 @@ turbo_death_warrior/
 │   └── turbo_death_warrior/
 │       ├── __init__.py
 │       ├── game_engine.py       # I/O-free rewrite of the game logic
-│       └── server.py            # stdlib HTTP server on port 8001
+│       └── server.py            # stdlib HTTP server on port 8001 (API-only)
 ├── test/
 │   └── test_game_engine.py      # 32 unit tests (pytest)
-├── web/
-│   └── index.html               # single-file frontend (HTML/CSS/JS)
 ├── Makefile
 ├── requirements.txt             # pytest for test suite
 ├── .env                         # local config (not committed)
@@ -96,16 +107,18 @@ turbo_death_warrior/
 └── README.md
 ```
 
+Frontend lives in `my-website` (`js/turbo-death-warrior.js` + `projects.html`), not here — this repo is API-only by design.
+
 ## API Overview
 
-All endpoints speak JSON. The server holds one `Game` per ID in memory.
+All endpoints speak JSON. The server holds one `Game` per ID in memory (TTL-evicted via `TDW_GAME_TTL_SECONDS`).
 
 | Method | Path                        | Purpose                        |
 |--------|-----------------------------|--------------------------------|
-| GET    | `/`                         | Serve the frontend             |
-| POST   | `/api/game`                 | Create a game, returns `game_id` |
-| POST   | `/api/game/<id>/name`       | Submit player name             |
-| POST   | `/api/game/<id>/action`     | Perform a choice (`{"id": "attack"}`) |
+| POST   | `/tdw-api/game`             | Create a game, returns `game_id` |
+| POST   | `/tdw-api/game/<id>/name`   | Submit player name             |
+| POST   | `/tdw-api/game/<id>/action` | Perform a choice (`{"id": "attack"}`) |
+| GET    | `/`                         | `404` (no frontend — use `my-website`) |
 
 Each response contains `messages`, `options`, optional `text_input`,
 and a `state` snapshot (player, enemy, scene, over).
