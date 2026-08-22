@@ -17,7 +17,7 @@ from pathlib import Path
 
 from turbo_death_warrior.game_engine import Game
 
-ENV_FILE = Path(__file__).resolve().parents[1] / ".env"
+ENV_FILE = Path(__file__).resolve().parents[2] / ".env"
 
 
 def _load_env(path=ENV_FILE):
@@ -41,7 +41,7 @@ _load_env()
 
 HOST = os.environ.get("TDW_HOST", "127.0.0.1")
 PORT = int(os.environ.get("TDW_PORT", "8001"))
-WEB_DIR = Path(__file__).resolve().parents[1] / "web"
+WEB_DIR = Path(__file__).resolve().parents[2] / "web"
 
 GAMES = {}
 LOCK = threading.Lock()
