@@ -75,21 +75,10 @@ class Handler(BaseHTTPRequestHandler):
     # --- routes -------------------------------------------------------
 
     def do_GET(self):
-        if self.path in ("/", "/index.html"):
-            try:
-                html = (WEB_DIR / "index.html").read_bytes()
-            except FileNotFoundError:
-                return self._error(500, "web/index.html is missing")
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(html)))
-            self.end_headers()
-            self.wfile.write(html)
-            return
         self._error(404, "not found")
 
     def do_POST(self):
-        if self.path == "/api/game":
+        if self.path == "/tdw-api/game":
             gid = secrets.token_hex(8)
             game = Game()
             with LOCK:
@@ -99,7 +88,7 @@ class Handler(BaseHTTPRequestHandler):
             return self._json(200, payload)
 
         parts = self.path.strip("/").split("/")
-        if len(parts) == 4 and parts[:2] == ["api", "game"]:
+        if len(parts) == 4 and parts[:2] == ["tdw-api", "game"]:
             _, _, gid, op = parts
             with LOCK:
                 game = GAMES.get(gid)

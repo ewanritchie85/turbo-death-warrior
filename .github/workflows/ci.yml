@@ -28,3 +28,38 @@ jobs:
 
       - name: Run tests
         run: make test
+
+  deploy:
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: self-hosted
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy to Raspberry Pi
+        run: |
+          rsync -avz --delete \
+            --exclude '.git' \
+            --exclude '.venv' \
+            --exclude '__pycache__' \
+            --exclude '.pytest_cache' \
+            --exclude '.env' \
+            ./ /home/ewanritchie/turbo-death-warrior/
+
+      - name: Install dependencies
+        run: |
+          cd /home/ewanritchie/turbo-death-warrior
+          python3 -m venv .venv
+          .venv/bin/pip install -e ".[test]"
+
+      - name: Restart service
+        run: sudo systemctl restart turbo-death-warrior
+
+      - name: Smoke check API
+        run: |
+          sleep 2
+          curl -sf http://127.0.0.1:8001/tdw-api/game \
+            -H "Content-Type: application/json" \
+            -d '{}' | grep -q "game_id"
