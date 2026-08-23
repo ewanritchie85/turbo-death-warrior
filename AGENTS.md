@@ -20,6 +20,7 @@ directly rather than only relying on the change log to convey it.
 Before considering any change finished, confirm all of the following:
 
 - `make check` and `make test` both pass.
+- `README.md` has been updated with any relevant changes.
 - `LLM_CONTEXT_LOG.md` has a new entry for this change under "Change Log
   Entries". If you're about to say a task is complete without having
   added one, that's a sign you're not actually done yet.

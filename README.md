@@ -1,8 +1,11 @@
 # Turbo Death Warrior - API
 
 Backend for the *Turbo Death Warrior* terminal adventure — an API-only
-service that powers the game. Fight a Caffeinated Orc, loot the Turbo
-Crystal, and take back the realm's Wi-Fi router from the Mega-Goblin King.
+service that powers the game. Three-act narrative: wake to find Oakhaven
+burned, track the warband east on the Road (meeting Kessa Vane, clearing
+ruins and ambushes, earning the Atlantean Sword from the Bandit Captain),
+then breach the Fortress and confront the High Priest of Doom. The Turbo
+Death Rune grants a devastating randomized finisher in boss fights.
 
 The frontend lives in the portfolio site (`my-website/js/turbo-death-warrior.js`
 rendered via `projects.html#turbo-death-warrior`); this repo is intentionally
@@ -75,9 +78,10 @@ pip install -r requirements.txt
 python -m pytest test/ -v
 ```
 
-The test suite covers 32 cases across initialization, name submission, town
-actions, cave entrance, combat mechanics, orc/boss defeat, game over, restart,
-state serialization, constants, and payload structure.
+The test suite covers 53 cases across initialization, name submission, town
+actions, road/fortress combat, enemy defeats (Raider Scout, Noothgrush Cultist,
+Bandit, Bandit Captain, The High Priest's Guard, The High Priest of Doom),
+game over, restart, state serialization, constants, and payload structure.
 
 ## CI / GitHub Actions
 
@@ -87,7 +91,6 @@ A workflow (`.github/workflows/ci.yml`) runs on every push and PR to `main`:
 2. Runs `make requirements`
 3. Runs `make check`
 4. Runs `make test`
-
 
 ## Project Structure
 
@@ -99,7 +102,7 @@ turbo_death_warrior/
 │       ├── game_engine.py       # I/O-free rewrite of the game logic
 │       └── server.py            # stdlib HTTP server on port 8001 (API-only)
 ├── test/
-│   └── test_game_engine.py      # 32 unit tests (pytest)
+│   └── test_game_engine.py      # 53 unit tests (pytest)
 ├── Makefile
 ├── requirements.txt             # pytest for test suite
 ├── .env                         # local config (not committed)
@@ -122,3 +125,26 @@ All endpoints speak JSON. The server holds one `Game` per ID in memory (TTL-evic
 
 Each response contains `messages`, `options`, optional `text_input`,
 and a `state` snapshot (player, enemy, scene, over).
+
+## Game Mechanics (Brief)
+
+**Act 1 — Oakhaven & Burzum Forest:** Name your warrior, visit the Blacksmith
+for the *Blade of Grief* (25 dmg), then enter the *Burzum Forest* to defeat
+the *Raider Scout* and claim the *Turbo Death Rune* (+1 potion).
+
+**Act 2 — The Road:** Take the road east to the *Trading Post* where *Kessa Vane*
+offers alliance. Clear *Ruins* (cultists) and *Ambush* (bandits), earn
+*learned_plan* and *cleared_ambush* flags. Visit the Trading Post to recruit
+Kessa (*recruited_ally*). Push through the *Mountain Pass* to defeat the
+*Bandit Captain* and claim the *Atlantean Sword* (40 dmg).
+
+**Act 3 — The Fortress:** Enter the *Fortress Gate*, defeat the *High Priest's Guard*
+in the corridor, auto-enter the *Throne Room* to face the *High Priest of Doom*.
+With the *Turbo Death Rune*, unleash **TURBO DEATH** (randomized 90–130 damage)
+to finish the fight.
+
+**Items & Flags:** Weapons (`Rusty Spoon` → `Blade of Grief` → `Atlantean Sword`),
+consumable potions (heal 40 HP), flags track progression (`avenged_raider`,
+`has_finisher_item`, `learned_plan`, `cleared_ambush`, `recruited_ally`,
+`defeated_captain`). The *Turbo Death Rune* flag (`has_finisher_item`) enables
+the *Turbo Death* finisher (90–130 dmg) in boss fights.
